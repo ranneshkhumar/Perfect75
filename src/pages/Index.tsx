@@ -966,7 +966,7 @@ const handleSemesterChange = (value: string) => {
             <Linkedin className="h-5 w-5" />
           </a>
           <a 
-            href="https://www.instagram.com/ranneshkhumar07?igsh=MWxnODU1bGM1dzVwZQ==" 
+            href="https://www.instagram.com/rannesh_khumar?igsh=MWxnODU1bGM1dzVwZQ==" 
             target="_blank"
             rel="noopener noreferrer"
             className="hover:text-foreground transition-colors"
