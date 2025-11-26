@@ -28,6 +28,32 @@ interface SubjectResult {
   classesCanSkip: number;
 }
 
+
+const saveDeptSemData = (
+  dept: string,
+  sem: string,
+  subjects: SubjectData[],
+  results: Record<string, SubjectResult>
+) => {
+  const allData = JSON.parse(localStorage.getItem("attendanceData") || "{}");
+
+  if (!allData[dept]) allData[dept] = {};
+  allData[dept][sem] = { subjects, results };
+
+  localStorage.setItem("attendanceData", JSON.stringify(allData));
+};
+
+
+
+
+
+
+
+
+
+
+
+
 const Index = () => {
   const [department, setDepartment] = useState<string>(() => {
     const saved = localStorage.getItem('attendanceDepartment');
@@ -41,21 +67,41 @@ const Index = () => {
     const saved = localStorage.getItem('attendanceSelectedSubjects');
     return saved ? new Set(JSON.parse(saved)) : new Set();
   });
-  const [subjects, setSubjects] = useState<SubjectData[]>(() => {
-    const saved = localStorage.getItem('attendanceSubjects');
-    return saved ? JSON.parse(saved) : [{ id: "1", name: "", attended: "", held: "", remaining: "" }];
-  });
-  const [results, setResults] = useState<Record<string, SubjectResult>>(() => {
-    const saved = localStorage.getItem('attendanceResults');
-    return saved ? JSON.parse(saved) : {};
-  });
+  const [subjects, setSubjects] = useState<SubjectData[]>([]);
+
+    
+ const [results, setResults] = useState<Record<string, SubjectResult>>({});
+
   const [showSummary, setShowSummary] = useState(false);
   const [showSubjectSelection, setShowSubjectSelection] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | undefined>(() => {
     const saved = localStorage.getItem('attendanceLastUpdated');
     return saved ? new Date(saved) : undefined;
   });
+  const loadDeptSemData = (dept: string, sem: string) => {
+  const allData = JSON.parse(localStorage.getItem("attendanceData") || "{}");
 
+  // ❌ no data saved for this dept/sem — return false
+  if (!allData[dept] || !allData[dept][sem]) {
+    return false;
+  }
+
+  const saved = allData[dept][sem];
+
+  // 🔥 Reset first to guarantee React re-renders
+  setSubjects([]);
+  setResults({});
+
+  // 🔥 Load saved data after reset
+  setTimeout(() => {
+    setSubjects(saved.subjects || []);
+    setResults(saved.results || {});
+    setShowSubjectSelection(false);
+    setShowSummary(true);
+  }, 50);
+
+  return true;
+};
   useEffect(() => {
     localStorage.setItem('attendanceDepartment', department);
   }, [department]);
@@ -81,6 +127,19 @@ const Index = () => {
       localStorage.setItem('attendanceLastUpdated', lastUpdated.toISOString());
     }
   }, [lastUpdated]);
+
+  // 🔥 Auto SAVE whenever subjects OR results change
+useEffect(() => {
+  if (!department || !semester) return;
+
+  // ⛔ Do NOT save while choosing subjects
+  if (showSubjectSelection) return;
+
+  // ⛔ Do NOT save if subjects are empty placeholder
+  if (subjects.length === 1 && !subjects[0].name.trim()) return;
+
+  saveDeptSemData(department, semester, subjects, results);
+}, [subjects, results, department, semester, showSubjectSelection]);
 
   const [showAddSubjectDialog, setShowAddSubjectDialog] = useState(false);
 
@@ -133,11 +192,183 @@ const Index = () => {
     });
   };
 
+const computeResults = (subjectsList: SubjectData[]) => {
+  const out: Record<string, SubjectResult> = {};
+
+  subjectsList.forEach((subject) => {
+    const attended = Number(subject.attended);
+    const held = Number(subject.held);
+    const remaining = Number(subject.remaining);
+
+    if (!attended || !held || !remaining) {
+      out[subject.id] = {
+        currentPercentage: 0,
+        classesNeeded: 0,
+        classesCanSkip: 0,
+      };
+      return;
+    }
+    
+
+    
+    const requiredPercent =  75;
+
+    const currentPercentage = held > 0 ? (attended / held) * 100 : 0;
+    const totalClasses = held + remaining;
+    const requiredAttendance = (requiredPercent / 100) * totalClasses;
+
+    let classesNeeded = 0;
+    let classesCanSkip = 0;
+
+    if (attended < requiredAttendance) {
+      classesNeeded = Math.ceil(requiredAttendance - attended);
+      classesCanSkip = Math.max(0, remaining - classesNeeded);
+    } else {
+      const maxAbsences = totalClasses - requiredAttendance;
+      const currentAbsences = held - attended;
+      classesCanSkip = Math.floor(maxAbsences - currentAbsences);
+    }
+
+    out[subject.id] = {
+      currentPercentage,
+      classesNeeded,
+      classesCanSkip,
+    };
+  });
+
+  return out;
+};
+const autoCalculate = (currentSubjects: SubjectData[]) => {
+  const newResults: Record<string, SubjectResult> = {};
+
+  currentSubjects.forEach(subject => {
+    if (!subject.name.trim()) return;
+
+    const attended = Number(subject.attended);
+    const held = Number(subject.held);
+    const remaining = Number(subject.remaining);
+
+    // Basic validity checks
+    if (isNaN(attended) || isNaN(held)) return;
+    if (held <= 0) return;
+
+    // Calculate percentage always
+    const currentPercentage = (attended / held) * 100;
+
+    // If remaining is empty → only show percentage
+    if (!subject.remaining.trim()) {
+      newResults[subject.id] = {
+        currentPercentage,
+        classesNeeded: -1,  // indicates missing
+        classesCanSkip: -1, // indicates missing
+      };
+      return;
+    }
+
+    // When remaining exists, do full calculation
+    const totalClasses = held + remaining;
+
+    const requiredAttendance =  0.75 * totalClasses;
+
+    let classesNeeded = 0;
+    let classesCanSkip = 0;
+
+    if (attended < requiredAttendance) {
+      classesNeeded = Math.ceil(requiredAttendance - attended);
+      classesCanSkip = Math.max(0, remaining - classesNeeded);
+    } else {
+      const maxAbsences = totalClasses - requiredAttendance;
+      const currentAbsences = held - attended;
+      classesCanSkip = Math.floor(maxAbsences - currentAbsences);
+    }
+
+    newResults[subject.id] = {
+      currentPercentage,
+      classesNeeded,
+      classesCanSkip
+    };
+  });
+
+  setResults(newResults);
+};
+
+
+
+
   const updateSubject = (id: string, field: keyof SubjectData, value: string) => {
     setSubjects(subjects.map(s => 
       s.id === id ? { ...s, [field]: value } : s
     ));
   };
+
+// 🔥 AUTO CALCULATE — runs whenever subject values change
+useEffect(() => {
+  const newResults: Record<string, SubjectResult> = {};
+
+  subjects.forEach((subject) => {
+    const attended = Number(subject.attended);
+    const held = Number(subject.held);
+    const remaining = Number(subject.remaining);
+
+    // ❌ If fields empty → show ring but no classesNeeded/skip
+    const isValidAttended = !isNaN(attended) && attended >= 0;
+    const isValidHeld = !isNaN(held) && held >= 0;
+
+    // 💥 Prevent attended > held (fix your 100%+ bug!)
+    if (attended > held) {
+      newResults[subject.id] = {
+        currentPercentage: 0,
+        classesNeeded: 0,
+        classesCanSkip: 0
+      };
+      return;
+    }
+
+    // 🟡 Show percentage even if remaining is NOT entered
+    const currentPercentage =
+      isValidHeld && held > 0 ? (attended / held) * 100 : 0;
+
+    // ❌ If remaining missing → only % happens, no needed/skip logic
+    if (subject.remaining.trim() === "") {
+      newResults[subject.id] = {
+        currentPercentage,
+        classesNeeded: 0,
+        classesCanSkip: 0
+      };
+      return;
+    }
+
+    // From here, full calculation happens only if remaining exists
+    
+
+    const requiredPercent =  75;
+
+    const totalClasses = held + remaining;
+    const requiredAttendance = (requiredPercent / 100) * totalClasses;
+
+    let classesNeeded = 0;
+    let classesCanSkip = 0;
+
+    if (attended < requiredAttendance) {
+      classesNeeded = Math.ceil(requiredAttendance - attended);
+      classesCanSkip = Math.max(0, remaining - classesNeeded);
+    } else {
+      const maxAbsences = totalClasses - requiredAttendance;
+      const currentAbsences = held - attended;
+      classesCanSkip = Math.floor(maxAbsences - currentAbsences);
+    }
+
+    newResults[subject.id] = {
+      currentPercentage,
+      classesNeeded,
+      classesCanSkip
+    };
+  });
+
+  setResults(newResults);
+}, [subjects]);
+
+
 
   const handleDepartmentChange = (value: string) => {
     setDepartment(value);
@@ -146,19 +377,42 @@ const Index = () => {
     setShowSubjectSelection(false);
   };
 
-  const handleSemesterChange = (value: string) => {
-    setSemester(value);
-    setSelectedSubjects(new Set());
-    
-    const semNum = Number(value);
-    if (department && subjectData[department]?.[semNum]) {
-      setShowSubjectSelection(true);
-    } else if (department === "Others") {
-      // For "Others", just reset to manual entry
-      setShowSubjectSelection(false);
-      setSubjects([{ id: "1", name: "", attended: "", held: "", remaining: "" }]);
-    }
-  };
+const handleSemesterChange = (value: string) => {
+  setSemester(value);
+
+  if (!department) return;
+
+  // SPECIAL CASE: Others department
+  if (department === "Others") {
+    setShowSubjectSelection(false); // skip subject list UI
+    setSubjects([{ id: Date.now().toString(), name: "", attended: "", held: "", remaining: "" }]);
+    setResults({});
+    setShowSummary(false);
+    return;
+  }
+
+  // Normal case for all defined departments
+  const allData = JSON.parse(localStorage.getItem("attendanceData") || "{}");
+  const saved = allData[department]?.[value];
+
+  if (saved) {
+    // load saved CSE/AIDS/ECE etc
+    setSubjects(saved.subjects || []);
+    setResults(saved.results || {});
+    setShowSummary(true);
+    setShowSubjectSelection(false);
+    return;
+  }
+
+  // show subject selection for defined departments
+  setSelectedSubjects(new Set());
+  setSubjects([]);
+  setResults({});
+  setShowSummary(false);
+  setShowSubjectSelection(true);
+};
+
+
 
   const handleSubjectToggle = (subjectName: string) => {
     setSelectedSubjects(prev => {
@@ -394,7 +648,7 @@ const Index = () => {
         </Card>
 
         {/* Subject Selection for predefined departments */}
-        {showSubjectSelection && department && semester && subjectData[department]?.[Number(semester)] && (
+        {showSubjectSelection && department !== "Others" && semester && subjectData[department]?.[Number(semester)] && (
           <Card className="mb-8 border-2 animate-bounce-in" style={{ borderColor: "hsl(var(--accent) / 0.4)", boxShadow: "var(--shadow-glow)" }}>
             <CardHeader className="bg-gradient-to-r from-accent/10 to-primary/10">
               <CardTitle className="flex items-center gap-2">
@@ -409,7 +663,7 @@ const Index = () => {
                   <Checkbox
                     id="select-all"
                     checked={
-                      department && semester && subjectData[department]?.[Number(semester)]
+                      department !== "Others" && semester && subjectData[department]?.[Number(semester)]
                         ? selectedSubjects.size === subjectData[department][Number(semester)].length
                         : false
                     }
@@ -613,7 +867,7 @@ const Index = () => {
         )}
 
         {/* Summary Report */}
-        {showSummary && Object.keys(results).length > 0 && (
+        {Object.keys(results).length > 0 && (
           <Card className="mt-8 border-2 animate-bounce-in" style={{ borderColor: "hsl(var(--success) / 0.4)", boxShadow: "var(--shadow-glow)" }}>
             <CardHeader style={{ background: "var(--gradient-success)" }}>
               <CardTitle className="flex items-center gap-2 text-white">
@@ -648,24 +902,34 @@ const Index = () => {
                             Current: {result.currentPercentage.toFixed(2)}%
                           </p>
                         </div>
-                        <div className="flex-1">
-                          {result.currentPercentage < 75 ? (
-                            <div className="text-sm">
-                              <p className="font-medium text-warning">
-                                Need to attend: <span className="text-lg font-bold">{result.classesNeeded}</span> out of <span className="font-bold">{subject.remaining}</span> remaining {Number(subject.remaining) === 1 ? 'class' : 'classes'}
-                              </p>
-                              {result.classesNeeded > Number(subject.remaining) && (
-                                <p className="text-destructive text-xs mt-1">
-                                  ⚠️ Request faculty for {result.classesNeeded - Number(subject.remaining)} present {result.classesNeeded - Number(subject.remaining) === 1 ? 'mark' : 'marks'}
-                                </p>
-                              )}
-                            </div>
-                          ) : (
-                            <p className="text-sm font-medium text-success">
-                              Can skip: <span className="text-lg font-bold">{result.classesCanSkip}</span> out of <span className="font-bold">{subject.remaining}</span> remaining {Number(subject.remaining) === 1 ? 'class' : 'classes'}
-                            </p>
-                          )}
-                        </div>
+                       <div className="flex-1">
+  {/* No remaining → show simple message */}
+  {!subject.remaining ? (
+    <p className="text-sm text-muted-foreground italic">
+      ⏳ Enter remaining classes to calculate needed/skip info.
+    </p>
+  ) : result.currentPercentage < 75 ? (
+    <div className="text-sm">
+      <p className="font-medium text-warning">
+        Need to attend: <span className="text-lg font-bold">{result.classesNeeded}</span>
+        {" "}out of <span className="font-bold">{subject.remaining}</span>{" "}
+        remaining {Number(subject.remaining) === 1 ? "class" : "classes"}
+      </p>
+      {result.classesNeeded > Number(subject.remaining) && (
+        <p className="text-destructive text-xs mt-1">
+          ⚠️ Request faculty for {result.classesNeeded - Number(subject.remaining)} present
+        </p>
+      )}
+    </div>
+  ) : (
+    <p className="text-sm font-medium text-success">
+      Can skip: <span className="text-lg font-bold">{result.classesCanSkip}</span>
+      {" "}out of <span className="font-bold">{subject.remaining}</span>{" "}
+      remaining {Number(subject.remaining) === 1 ? "class" : "classes"}
+    </p>
+  )}
+</div>
+
                       </div>
                     </div>
                   );
