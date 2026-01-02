@@ -50,6 +50,17 @@ export const subjectData: DepartmentSubjects = {
       { name: "JAVA" },
       { name: "JAVA Lab" },
     ],
+    4: [
+      { name: "Probability,stats and sim" },
+      { name: "Probability,stats and sim(lab)" },
+      { name: "OS" },
+      { name: "OS(Lab)"},
+      { name: "Design thinking and innovation" },
+      { name: "Software Construuction" },
+      { name: "Software Construuction (lab)" } ,
+      { name: "UID" },
+      { name: "UID Lab" },
+    ],
   },
   AIDS: {
     1: [
@@ -65,6 +76,7 @@ export const subjectData: DepartmentSubjects = {
       { name: "Mathematical Foundations" },
       { name: "TC-I (Technical Communication-I)" },
     ],
+
   },
   ECE: {
     1: [
@@ -90,6 +102,45 @@ export const subjectData: DepartmentSubjects = {
       { name: "Introduction to Python Programming" },
       { name: "(Lab) Introduction to Python Programming" },
       { name: "(Lab) Analog and Digital Circuits Laboratory" },
+    ],
+    4:[
+      { name: "Signals and Systems" },
+      { name: "Transmision Lines and WAveguides " },
+      { name: "Electromagnetic Fields" },
+      { name: "Communication Theory" },
+      { name: "Analog Circuits-II" },
+      { name: "Analog Circuits-II(lab)" },
+      { name: "Probability and Random Processes" },
+      { name: "Probability and Random Processes(lab)" },
+      { name: "Python for machine learning" },
+    ],
+  },
+  MECH: {
+    2: [
+      { name: "TC-II/EPC" },
+      { name: "Differential Equations and Complex variables" },
+      { name: "Engineering Mechanics" },
+      { name: "EPL (Electrical and Electronics Lab)" },
+      { name: "Tamils and technology" },
+      { name: "Chemistry" },
+      { name: "Chemistry lab" },
+      { name: "Basic Electrical Engineering" },
+      { name: "ICFM (Indian Constitution and Freedom Movement)" },
+      { name: "Problem solving and Python " },
+      { name: "Pyhon lab" },
+    ],
+    4: [
+      { name: "Engineering Materials and Metallurgy" },
+      { name: "Manufacturing technology II" },
+      { name: "Dynamics of Machines" },
+      { name: "Dynamics of Machines(lab)" },
+      { name: "Fluid mechanics and machinery" },
+      { name: "Fluid mechanics and machinery(lab)" },
+      { name: "Thermal engiineering" },
+       { name: "Thermal engiineering(lab)" },
+      { name: "Machine Drawing Lab" },
+       { name: "Manufacturing technology II (lab)" },
+      { name: "Chemistry lab" },
     ],
   },
   BME: {
@@ -159,9 +210,21 @@ export const subjectData: DepartmentSubjects = {
       { name: "JAVA" },
       { name: "JAVA Lab" },
     ],
+     4: [
+      { name: "Probability,stats and sim" },
+      { name: "Probability,stats and sim(lab)" },
+      { name: "OS" },
+      { name: "OS(Lab)"},
+      { name: "Fundamentals of Management of Engineers" },
+      { name: "Software Construuction" } ,
+      { name: "Software Construuction (lab)" } ,
+      { name: "MongoDB Essentials" },
+      { name: "MongoDB Essentials(Lab)"},
+    ],
+  
     
   }
 };
 
-export const departments = ["CSE", "AIDS", "ECE","IT", "BME","Others"] as const;
+export const departments = ["CSE", "ECE","MECH", "AIDS","IT","EEE", "BME","Others"] as const;
 export const semesters = [1, 2, 3, 4, 5, 6, 7, 8] as const;
