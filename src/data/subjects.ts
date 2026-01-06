@@ -54,7 +54,6 @@ export const subjectData: DepartmentSubjects = {
       { name: "Probability,stats and sim" },
       { name: "Probability,stats and sim(lab)" },
       { name: "OS" },
-      { name: "OS(Lab)"},
       { name: "Design thinking and innovation" },
       { name: "Software Construuction" },
       { name: "Software Construuction (lab)" } ,
