@@ -74,10 +74,7 @@ const Index = () => {
 
   const [showSummary, setShowSummary] = useState(false);
   const [showSubjectSelection, setShowSubjectSelection] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | undefined>(() => {
-    const saved = localStorage.getItem('attendanceLastUpdated');
-    return saved ? new Date(saved) : undefined;
-  });
+ 
   const loadDeptSemData = (dept: string, sem: string) => {
   const allData = JSON.parse(localStorage.getItem("attendanceData") || "{}");
 
@@ -102,6 +99,27 @@ const Index = () => {
 
   return true;
 };
+const [lastUpdated, setLastUpdated] = useState<Date | undefined>(() => {
+  const saved = localStorage.getItem('attendanceLastUpdated');
+  return saved ? new Date(saved) : undefined;
+});
+
+
+// ✅ ADD THIS BLOCK HERE (around line ~105)
+useEffect(() => {
+  if (!department || !semester) return;
+
+  const allData = JSON.parse(localStorage.getItem("attendanceData") || "{}");
+  const saved = allData[department]?.[semester];
+
+  if (saved) {
+    setSubjects(saved.subjects || []);
+    setResults(saved.results || {});
+    setShowSummary(true);
+    setShowSubjectSelection(false);
+  }
+}, [department, semester]);
+
   useEffect(() => {
     localStorage.setItem('attendanceDepartment', department);
   }, [department]);
