@@ -51,7 +51,7 @@ export function CircularProgress({
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-2xl font-bold" style={{ color: getColor() }}>
-          {percentage.toFixed(1)}%
+          {percentage.toFixed(2)}%
         </span>
       </div>
     </div>
