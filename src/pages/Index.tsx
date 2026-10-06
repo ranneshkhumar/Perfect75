@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, Calculator, Linkedin, Instagram, FileText, CalendarIcon } from "lucide-react";
+import { Plus, Calculator, Linkedin, Instagram, FileText, CalendarIcon, Mail, Send, Copy, Check, Download, Share2, Image as ImageIcon } from "lucide-react";
+import { toPng, toBlob } from "html-to-image";
 import SubjectCard from "@/components/SubjectCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { toast } from "@/hooks/use-toast";
@@ -8,9 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { subjectData, departments, semesters } from "@/data/subjects";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -103,6 +106,216 @@ const [lastUpdated, setLastUpdated] = useState<Date | undefined>(() => {
   const saved = localStorage.getItem('attendanceLastUpdated');
   return saved ? new Date(saved) : undefined;
 });
+
+const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+const [recipientEmail, setRecipientEmail] = useState("");
+const [copiedReport, setCopiedReport] = useState(false);
+const [downloadingImage, setDownloadingImage] = useState(false);
+const summaryRef = useRef<HTMLDivElement>(null);
+
+const handleDownloadImage = async () => {
+  if (!summaryRef.current) return;
+  setDownloadingImage(true);
+  try {
+    const dataUrl = await toPng(summaryRef.current, {
+      cacheBust: true,
+      filter: (node) => {
+        if (node instanceof HTMLElement && node.dataset.hideOnImage === "true") {
+          return false;
+        }
+        return true;
+      },
+      style: {
+        borderRadius: "0.75rem",
+      }
+    });
+    const link = document.createElement("a");
+    const filename = `attendance_summary_${department || "report"}_${semester ? `sem${semester}_` : ""}${format(new Date(), "yyyy-MM-dd")}.png`;
+    link.download = filename;
+    link.href = dataUrl;
+    link.click();
+    toast({
+      title: "Image Downloaded! 🖼️",
+      description: `Saved attendance summary as ${filename}`,
+    });
+  } catch (err) {
+    console.error("Failed to download image", err);
+    toast({
+      title: "Download Failed",
+      description: "Could not generate summary image. Please try again.",
+      variant: "destructive",
+    });
+  } finally {
+    setDownloadingImage(false);
+  }
+};
+
+const generateSummaryReportText = () => {
+  let report = `=======================================\n`;
+  report += `   PERFECT 75 - ATTENDANCE REPORT     \n`;
+  report += `=======================================\n\n`;
+
+  if (department) report += `Department: ${department}\n`;
+  if (semester) report += `Semester: ${semester}\n`;
+  if (lastUpdated) report += `Last Updated: ${format(lastUpdated, "PPP")} (${format(lastUpdated, "EEEE")})\n`;
+  report += `Generated On: ${format(new Date(), "PPP, p")}\n\n`;
+
+  report += `---------------------------------------\n`;
+  report += `SUBJECT BREAKDOWN:\n`;
+  report += `---------------------------------------\n`;
+
+  subjects.forEach((subject, index) => {
+    const result = results[subject.id];
+    if (!result || !subject.name) return;
+
+    report += `\n${index + 1}. ${subject.name.toUpperCase()}\n`;
+    report += `   Attended: ${subject.attended || 0} / ${subject.held || 0}\n`;
+    report += `   Current Attendance: ${result.currentPercentage.toFixed(2)}%\n`;
+
+    if (!subject.remaining) {
+      // Remaining classes not entered
+    } else if (result.currentPercentage < 75) {
+      report += `   Action Needed: Must attend ${result.classesNeeded} out of ${subject.remaining} remaining class(es).\n`;
+      if (result.classesNeeded > Number(subject.remaining)) {
+        report += `   Notice: Need ${result.classesNeeded - Number(subject.remaining)} extra present class(es) marked.\n`;
+      }
+    } else {
+      report += `   Flexibility: Can skip ${result.classesCanSkip} out of ${subject.remaining} remaining class(es).\n`;
+    }
+  });
+
+  report += `\n---------------------------------------\n`;
+  report += `Tracked via Perfect 75 Attendance Manager\n`;
+  return report;
+};
+
+const generateSummaryImageBlob = async (): Promise<{ blob: Blob; dataUrl: string; filename: string } | null> => {
+  if (!summaryRef.current) return null;
+  try {
+    const dataUrl = await toPng(summaryRef.current, {
+      cacheBust: true,
+      filter: (node) => !(node instanceof HTMLElement && node.dataset.hideOnImage === "true"),
+      style: { borderRadius: "0.75rem" }
+    });
+    const blob = await toBlob(summaryRef.current, {
+      cacheBust: true,
+      filter: (node) => !(node instanceof HTMLElement && node.dataset.hideOnImage === "true"),
+      style: { borderRadius: "0.75rem" }
+    });
+    if (!blob) return null;
+    const filename = `attendance_summary_${department || "report"}_${semester ? `sem${semester}_` : ""}${format(new Date(), "yyyy-MM-dd")}.png`;
+    return { blob, dataUrl, filename };
+  } catch (err) {
+    console.error("Failed to generate summary image blob", err);
+    return null;
+  }
+};
+
+const handleSendGmail = async () => {
+  const text = generateSummaryReportText();
+  const subjectText = `Attendance Summary Report - PERFECT 75 (${department || "General"})`;
+  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipientEmail)}&su=${encodeURIComponent(subjectText)}&body=${encodeURIComponent(text)}`;
+  
+  // Auto capture & copy image to clipboard + trigger download
+  const imageData = await generateSummaryImageBlob();
+  let imageCopied = false;
+  if (imageData) {
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([
+          new ClipboardItem({ "image/png": imageData.blob })
+        ]);
+        imageCopied = true;
+      }
+    } catch (e) {
+      console.log("Clipboard write image failed", e);
+    }
+    const link = document.createElement("a");
+    link.download = imageData.filename;
+    link.href = imageData.dataUrl;
+    link.click();
+  }
+
+  window.open(gmailUrl, "_blank");
+  toast({
+    title: "Opening Gmail 📧",
+    description: imageCopied 
+      ? "Gmail opened! Summary image is copied to clipboard & downloaded. Press Ctrl+V to paste the image directly into your email."
+      : "Gmail opened! Summary image downloaded. Please attach it in your email.",
+  });
+  setEmailDialogOpen(false);
+};
+
+const handleShareWithImage = async () => {
+  const text = generateSummaryReportText();
+  const subjectText = `Attendance Summary Report - PERFECT 75 (${department || "General"})`;
+  const imageData = await generateSummaryImageBlob();
+  
+  if (imageData) {
+    const file = new File([imageData.blob], imageData.filename, { type: "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          title: subjectText,
+          text: text,
+          files: [file]
+        });
+        toast({
+          title: "Report Shared! 🚀",
+          description: "Attendance summary image & report shared successfully."
+        });
+        setEmailDialogOpen(false);
+        return;
+      } catch (err) {
+        console.log("Share cancelled or not supported", err);
+      }
+    }
+  }
+  
+  // Fallback to Gmail method if Web Share is unavailable
+  handleSendGmail();
+};
+
+const handleSendMailto = async () => {
+  const text = generateSummaryReportText();
+  const subjectText = `Attendance Summary Report - PERFECT 75 (${department || "General"})`;
+  const mailtoUrl = `mailto:${encodeURIComponent(recipientEmail)}?subject=${encodeURIComponent(subjectText)}&body=${encodeURIComponent(text)}`;
+  
+  const imageData = await generateSummaryImageBlob();
+  if (imageData) {
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([
+          new ClipboardItem({ "image/png": imageData.blob })
+        ]);
+      }
+    } catch (e) {
+      console.log("Clipboard image write failed", e);
+    }
+    const link = document.createElement("a");
+    link.download = imageData.filename;
+    link.href = imageData.dataUrl;
+    link.click();
+  }
+
+  window.open(mailtoUrl, "_blank");
+  toast({
+    title: "Opening Mail App 📧",
+    description: "Mail app opened! Summary image copied to clipboard & downloaded.",
+  });
+  setEmailDialogOpen(false);
+};
+
+const handleCopySummary = () => {
+  const text = generateSummaryReportText();
+  navigator.clipboard.writeText(text);
+  setCopiedReport(true);
+  toast({
+    title: "Copied to Clipboard! 📋",
+    description: "Attendance summary report copied to clipboard.",
+  });
+  setTimeout(() => setCopiedReport(false), 2000);
+};
 
 
 // ✅ ADD THIS BLOCK HERE (around line ~105)
@@ -886,21 +1099,117 @@ const handleSemesterChange = (value: string) => {
 
         {/* Summary Report */}
         {Object.keys(results).length > 0 && (
-          <Card className="mt-8 border-2 animate-bounce-in" style={{ borderColor: "hsl(var(--success) / 0.4)", boxShadow: "var(--shadow-glow)" }}>
-            <CardHeader style={{ background: "var(--gradient-success)" }}>
-              <CardTitle className="flex items-center gap-2 text-white">
-                <FileText className="h-5 w-5" />
-                <span className="text-2xl">🎊</span>
-                Attendance Summary Report
-              </CardTitle>
-              {lastUpdated && (
-                <div className="text-sm mt-2">
-                  <span className="font-medium text-white/90">Last Updated: </span>
-                  <span className="font-bold text-lg bg-gradient-to-r from-yellow-200 via-yellow-100 to-yellow-200 bg-clip-text text-transparent animate-shimmer">
-                    {format(lastUpdated, "PPP")} ({format(lastUpdated, "EEEE")})
-                  </span>
-                </div>
-              )}
+          <Card ref={summaryRef} className="mt-8 border-2 animate-bounce-in" style={{ borderColor: "hsl(var(--success) / 0.4)", boxShadow: "var(--shadow-glow)" }}>
+            <CardHeader style={{ background: "var(--gradient-success)" }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-white">
+                  <FileText className="h-5 w-5" />
+                  <span className="text-2xl">🎊</span>
+                  Attendance Summary Report
+                </CardTitle>
+                {lastUpdated && (
+                  <div className="text-sm mt-2">
+                    <span className="font-medium text-white/90">Last Updated: </span>
+                    <span className="font-bold text-lg bg-gradient-to-r from-yellow-200 via-yellow-100 to-yellow-200 bg-clip-text text-transparent animate-shimmer">
+                      {format(lastUpdated, "PPP")} ({format(lastUpdated, "EEEE")})
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div data-hide-on-image="true" className="flex flex-wrap items-center gap-2">
+                <Button
+                  onClick={handleDownloadImage}
+                  variant="secondary"
+                  size="sm"
+                  disabled={downloadingImage}
+                  className="gap-1.5 font-semibold hover:scale-105 transition-transform"
+                >
+                  <Download className="h-4 w-4" />
+                  {downloadingImage ? "Downloading..." : "Download Image"}
+                </Button>
+
+                <Button
+                  onClick={handleCopySummary}
+                  variant="secondary"
+                  size="sm"
+                  className="gap-1.5 font-semibold hover:scale-105 transition-transform"
+                >
+                  {copiedReport ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+                  {copiedReport ? "Copied!" : "Copy"}
+                </Button>
+
+                <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="gap-1.5 font-semibold hover:scale-105 transition-transform"
+                    >
+                      <Mail className="h-4 w-4" />
+                      Email Report
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2 text-xl">
+                        <Mail className="h-5 w-5 text-primary" />
+                        Email Attendance Summary
+                      </DialogTitle>
+                      <DialogDescription>
+                        Send your detailed attendance breakdown via your default email application.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg flex items-start gap-2 text-xs font-medium text-foreground">
+                        <ImageIcon className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-primary">🖼️ Summary Image Auto-Attached</p>
+                          <p className="text-muted-foreground mt-0.5">
+                            When sending via email, your summary card image is automatically generated, downloaded & copied to your clipboard. Simply press <kbd className="px-1 py-0.5 bg-muted rounded border border-border text-[10px]">Ctrl+V</kbd> to paste the image in your email!
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="recipient-email" className="font-semibold">Recipient Email (Optional)</Label>
+                        <Input
+                          id="recipient-email"
+                          type="email"
+                          placeholder="e.g. parent@gmail.com, student@domain.com"
+                          value={recipientEmail}
+                          onChange={(e) => setRecipientEmail(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="font-semibold">Report Preview</Label>
+                        <textarea
+                          readOnly
+                          rows={7}
+                          value={generateSummaryReportText()}
+                          className="w-full p-3 font-mono text-xs bg-muted rounded-md border border-border resize-none focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter className="flex flex-col sm:flex-row gap-2">
+                      {typeof navigator !== "undefined" && navigator.canShare && (
+                        <Button variant="outline" onClick={handleShareWithImage} className="gap-2 font-semibold">
+                          <Share2 className="h-4 w-4 text-primary" />
+                          Share with Image
+                        </Button>
+                      )}
+                      <Button variant="outline" onClick={handleCopySummary} className="gap-2 font-semibold">
+                        {copiedReport ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+                        {copiedReport ? "Copied!" : "Copy Text"}
+                      </Button>
+                      <Button onClick={handleSendGmail} className="gap-2 font-bold" style={{ background: "var(--gradient-hero)" }}>
+                        <Mail className="h-4 w-4" />
+                        Send via Gmail
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </CardHeader>
             <CardContent className="pt-6">
               <div className="space-y-4">
