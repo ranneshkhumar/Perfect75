@@ -613,21 +613,15 @@ const handleSemesterChange = (value: string) => {
 
   if (!department) return;
 
-  // SPECIAL CASE: Others department
-  if (department === "Others") {
-    setShowSubjectSelection(false); // skip subject list UI
-    setSubjects([{ id: Date.now().toString(), name: "", attended: "", held: "", remaining: "" }]);
-    setResults({});
-    setShowSummary(false);
-    return;
-  }
+  // Check if predefined subjects exist for this department and semester
+  const predefinedSubjects = subjectData[department]?.[Number(value)];
+  const hasPredefinedSubjects = Boolean(predefinedSubjects && predefinedSubjects.length > 0);
 
-  // Normal case for all defined departments
+  // If saved data exists in localStorage, load it
   const allData = JSON.parse(localStorage.getItem("attendanceData") || "{}");
   const saved = allData[department]?.[value];
 
-  if (saved) {
-    // load saved CSE/AIDS/ECE etc
+  if (saved && saved.subjects && saved.subjects.length > 0) {
     setSubjects(saved.subjects || []);
     setResults(saved.results || {});
     setShowSummary(true);
@@ -635,7 +629,16 @@ const handleSemesterChange = (value: string) => {
     return;
   }
 
-  // show subject selection for defined departments
+  // If department is "Others" or no predefined subjects exist for this dept & semester
+  if (!hasPredefinedSubjects || department === "Others") {
+    setShowSubjectSelection(false); // skip subject list selection card
+    setSubjects([{ id: Date.now().toString(), name: "", attended: "", held: "", remaining: "" }]);
+    setResults({});
+    setShowSummary(false);
+    return;
+  }
+
+  // show subject selection for departments with predefined subjects
   setSelectedSubjects(new Set());
   setSubjects([]);
   setResults({});
@@ -1073,7 +1076,7 @@ const handleSemesterChange = (value: string) => {
 
         {/* Action Buttons */}
         {!showSubjectSelection && (
-          <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="mt-8 flex justify-center">
             <Button
               onClick={addSubject}
               variant="outline"
@@ -1083,16 +1086,6 @@ const handleSemesterChange = (value: string) => {
             >
               <Plus className="h-5 w-5" />
               ➕ Add Subject
-            </Button>
-            
-            <Button
-              onClick={calculateAttendance}
-              size="lg"
-              className="gap-2 text-lg font-bold hover:scale-105 transition-transform"
-              style={{ background: "var(--gradient-hero)", boxShadow: "var(--shadow-glow)" }}
-            >
-              <Calculator className="h-5 w-5" />
-              ✨ Calculate Magic!
             </Button>
           </div>
         )}
