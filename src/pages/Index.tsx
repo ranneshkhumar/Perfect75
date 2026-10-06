@@ -453,11 +453,11 @@ const computeResults = (subjectsList: SubjectData[]) => {
 
     if (attended < requiredAttendance) {
       classesNeeded = Math.ceil(requiredAttendance - attended);
-      classesCanSkip = Math.max(0, remaining - classesNeeded);
+      classesCanSkip = Math.min(remaining, Math.max(0, remaining - classesNeeded));
     } else {
       const maxAbsences = totalClasses - requiredAttendance;
       const currentAbsences = held - attended;
-      classesCanSkip = Math.floor(maxAbsences - currentAbsences);
+      classesCanSkip = Math.min(remaining, Math.max(0, Math.floor(maxAbsences - currentAbsences)));
     }
 
     out[subject.id] = {
@@ -506,11 +506,11 @@ const autoCalculate = (currentSubjects: SubjectData[]) => {
 
     if (attended < requiredAttendance) {
       classesNeeded = Math.ceil(requiredAttendance - attended);
-      classesCanSkip = Math.max(0, remaining - classesNeeded);
+      classesCanSkip = Math.min(remaining, Math.max(0, remaining - classesNeeded));
     } else {
       const maxAbsences = totalClasses - requiredAttendance;
       const currentAbsences = held - attended;
-      classesCanSkip = Math.floor(maxAbsences - currentAbsences);
+      classesCanSkip = Math.min(remaining, Math.max(0, Math.floor(maxAbsences - currentAbsences)));
     }
 
     newResults[subject.id] = {
@@ -582,11 +582,11 @@ useEffect(() => {
 
     if (attended < requiredAttendance) {
       classesNeeded = Math.ceil(requiredAttendance - attended);
-      classesCanSkip = Math.max(0, remaining - classesNeeded);
+      classesCanSkip = Math.min(remaining, Math.max(0, remaining - classesNeeded));
     } else {
       const maxAbsences = totalClasses - requiredAttendance;
       const currentAbsences = held - attended;
-      classesCanSkip = Math.floor(maxAbsences - currentAbsences);
+      classesCanSkip = Math.min(remaining, Math.max(0, Math.floor(maxAbsences - currentAbsences)));
     }
 
     newResults[subject.id] = {
